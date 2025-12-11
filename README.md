@@ -168,15 +168,6 @@ dune exec bin/solve_part2.exe < input.txt
 3. **Parallelism:** Serial processing minimizes area; could parallelize for higher throughput
 4. **Numeric Precision:** 7-bit joltage (max 99), 32-bit accumulator (handles millions of lines)
 
-## Results
-
-### My Solutions
-- **Part 1:** 17301 ✅
-- **Part 2:** [Your answer here] ✅
-
-### Example Results
-- **Part 1:** 357 ✅
-- **Part 2:** 3121910778619 ✅
 
 ## Testing
 
@@ -218,16 +209,7 @@ Software greedy algorithm chosen over hardware because:
 - Greedy algorithm is simple and efficient in software
 - Still demonstrates algorithmic thinking
 
-## Extensions & Future Work
 
-- [ ] Parameterize buffer size for arbitrary line lengths
-- [ ] Add pipeline stages to improve Fmax
-- [ ] Implement Part 2 in hardware with large arithmetic
-- [ ] Support configurable k (number of batteries to select)
-- [ ] Add AXI-Stream interface for easy IP integration
-- [ ] Formal verification of maximum-finding logic
-- [ ] Generate Verilog for actual FPGA synthesis
-- [ ] Benchmark on real FPGA hardware
 
 ## Synthesis & Physical Implementation
 
@@ -252,7 +234,7 @@ The design is suitable for:
 **Submitted for:** Jane Street Advent of FPGA 2025 Challenge  
 **Puzzle:** Day 3 (Parts 1 & 2)  
 **Language:** Hardcaml (OCaml-based HDL) + OCaml  
-**Eligible for:** Hardcaml T-shirt 👕
+
 
 ## Author
 
