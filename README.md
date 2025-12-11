@@ -75,13 +75,6 @@ dune exec bin/solve.exe < input.txt
 ## Results
 
 - Example input: **357** ✅
-- My puzzle input: **17301** ✅
-
-## Submission
-
-Submitted for Jane Street's Advent of FPGA 2025 Challenge
-- Language: Hardcaml (OCaml-based HDL)
-- Eligible for Hardcaml T-shirt! 👕
 
 ## License
 
