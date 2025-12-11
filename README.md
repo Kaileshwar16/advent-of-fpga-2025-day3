@@ -74,7 +74,8 @@ dune exec bin/solve.exe < input.txt
 
 ## Results
 
-- Example input: **357** ✅
+- My puzzle input: **17301** ✅
+
 
 ## License
 
