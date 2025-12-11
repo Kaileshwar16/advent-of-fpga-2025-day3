@@ -1,1 +1,2 @@
-(lang dune 3.17)
+(lang dune 3.0)
+(name advent_of_fpga_day3)

@@ -1,111 +1,88 @@
-"Hardcaml Template Project"
-===========================
+# Advent of FPGA 2025 - Day 3: Battery Joltage Calculator
 
+**Hardcaml Solution for Jane Street's Advent of FPGA Challenge**
 
-This repository provides a simple starter template for getting started with Hardcaml, including:
+## Problem
 
-- An RTL design that accepts a stream of numbers and calculates the range of the values,
-  including use of the Always DSL to construct a state-machine
-- A testbench, including waveform printing and VCD export using `hardcaml_test_harness`
-- A binary to generate RTL for synthesis
+Given battery banks (lines of digits 1-9), find the maximum 2-digit joltage each bank can produce by selecting exactly two batteries in their original positions. Sum all maximum joltages.
 
-## Installing Hardcaml
-
-Hardcaml can be installed with opam. We highly recommend using Hardcaml with OxCaml (a
-bleeding-edge OCaml compiler), which includes some Jane Street compiler extensions and
-maintains the latest version of Hardcaml; while still maintaining direct compatibility
-with existing OCaml code and libraries. Note that when looking at Hardcaml GitHub
-repositories, the OxCaml version is in a branch named `with-extensions`.
-
-Install [opam, the OxCaml compiler, and some basic developer
-tools](https://oxcaml.org/get-oxcaml/) to get started.
-
-For additional information on setting up the OCaml toolchain and editor support, see [Real
-World OCaml](https://dev.realworldocaml.org/install.html).
-
-Once it's set up, make sure you have the current switch selected in your shell:
-
+### Example
 ```
-opam switch 5.2.0+ox
-
-eval $(opam env)
+987654321111111 → 98 jolts (positions 0,1: digits 9,8)
+811111111111119 → 89 jolts (positions 0,14: digits 8,9)
+234234234234278 → 78 jolts (positions 12,13: digits 7,8)
+818181911112111 → 92 jolts (positions 6,11: digits 9,2)
+Total: 357
 ```
 
-Then, install the core Hardcaml libraries and some other libraries used in Hardcaml projects:
+## Solution
 
-```
-opam install -y hardcaml hardcaml_test_harness hardcaml_waveterm ppx_hardcaml
+Streaming hardware architecture in **Hardcaml** that:
+- Buffers up to 120 digits per line
+- Checks all pairs on-the-fly as digits arrive
+- Tracks maximum joltage per line
+- Accumulates total across all lines
 
-opam install -y core core_unix ppx_jane rope re dune
-```
+### Key Features
+- ✅ Fully synthesizable RTL
+- ✅ ~500 LUTs estimated
+- ✅ No block RAM required
+- ✅ Processes 1 digit per clock cycle
+- ✅ Handles lines up to 120 digits
 
-## Building the Example Project
+## Building
+```bash
+# Install dependencies
+opam install dune hardcaml ppx_jane
 
-To build the project, clone this repository and then run the following command, which will
-build the generator binary (note the exe prefix is standard for OCaml, even on Unix
-systems), as well as building and running all of the tests.
+# Build
+dune build
 
-```
-dune build bin/generate.exe @runtest
-```
+# Run tests
+dune test
 
-To validate that the tests are running, try changing one of the input values in
-`test_range_finder.ml` and re-running the tests, to see if the printed values change. Once
-`dune` shows a diff in the tests, it can be accepted using the following command (this
-will modify the file in-place, so you may need to close and re-open it):
-
-```
-dune promote
-```
-
-For more on how expect-tests work, see [this blog post](https://blog.janestreet.com/the-joy-of-expect-tests/)
-
-### Viewing Waveforms
-
-Hardcaml has two main ways to view waveforms:
-
-- Exporting to a `.hardcamlwaveform` file, which, can be viewed using the Hardcaml
-  terminal waveform viewer.
-  - To try this, uncomment the `waves_config` definition that sets the format to
-    `Hardcamlwaveform`, then run the tests again. The file should save into `/tmp/` by
-    default.
-  - To run the viewer, `hardcaml-waveform-viewer show file.hardcamlwaveform` (if the
-    command isn't available, make sure you've activated the opam switch in the same shell
-    you're trying to run in, see above)
-  - Some more details on using the viewer are available [here](
-    https://www.janestreet.com/web-app/hardcaml-docs/simulating-circuits/waveterm_interactive_viewer)
-
-- Exporting to a `.vcd` file, which can be viewed using standard tools like
-  [GTKWave](https://gtkwave.sourceforge.net/) and [Surfer](https://surfer-project.org/)
-  - To try this, uncomment the `waves_config` definition that sets the format to
-    `Vcd`, then run the tests again. The file should save into `/tmp/` by default.
-
-For small tests, waveforms can also be printed inline (as shown in
-`test_range_finder.ml`), which is useful for documenting and visualizing design behavior,
-albeit not as useful for interactive debugging.
-
-### Generating RTL
-
-To generate RTL, run the compiled `generate.exe` binary, which will print the Verilog source:
-```
-bin/generate.exe range-finder
+# Solve puzzle
+dune exec bin/solve.exe < input.txt
 ```
 
-Note that dune should automatically copy the compiled binary into your source directory,
-but if it does not, all build products can be found in `_build/default/`.
-
-## Resources
-
-- If you would like to run dune continuously to re-run tests every time a file is edited:
-
+## Project Structure
 ```
-dune build --watch --terminal-persistence=clear-on-rebuild-and-flush-history bin/generate.exe @runtest
+.
+├── src/
+│   ├── range_finder.ml      # Main RTL design
+│   └── range_finder.mli     # Module interface
+├── bin/
+│   └── solve.ml             # Solver executable
+├── test/
+│   └── test_range_finder.ml # Unit tests
+└── README.md
 ```
 
-- Hardcaml documentation and further tutorials [can be found
-  here](https://www.janestreet.com/web-app/hardcaml-docs/introduction/why/)
+## Hardware Architecture
 
-- Real World OCaml is a [free online book](https://dev.realworldocaml.org/toc.html) for learning OCaml
+**I/O Interface:**
+- Input: `digit[3:0]`, `digit_valid`, `line_end`, `clock`, `clear`
+- Output: `max_joltage[6:0]`, `total_joltage[31:0]`
 
-- The OCaml LSP and autoformatter can be used with VSCode, Emacs, and Vim, [see
-  instructions here](https://dev.realworldocaml.org/install.html#editor-setup)
+**Resources:**
+- 120×4-bit digit buffer
+- 8-bit counter
+- 7-bit max tracker
+- 32-bit accumulator
+
+**Algorithm:** For each new digit, form pairs with all previously buffered digits (earlier digit as tens, later as ones), find maximum, update best.
+
+## Results
+
+- Example input: **357** ✅
+- My puzzle input: **17301** ✅
+
+## Submission
+
+Submitted for Jane Street's Advent of FPGA 2025 Challenge
+- Language: Hardcaml (OCaml-based HDL)
+- Eligible for Hardcaml T-shirt! 👕
+
+## License
+
+MIT

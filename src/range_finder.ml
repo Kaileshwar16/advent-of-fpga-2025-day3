@@ -1,93 +1,97 @@
-(* An example design that takes a series of input values and calculates the range between
-   the largest and smallest one. *)
+open! Base
+open Hardcaml
 
-(* We generally open Core and Hardcaml in any source file in a hardware project. For
-   design source files specifically, we also open Signal. *)
-open! Core
-open! Hardcaml
-open! Signal
-
-let num_bits = 16
-
-(* Every hardcaml module should have an I and an O record, which define the module
-   interface. *)
 module I = struct
   type 'a t =
     { clock : 'a
     ; clear : 'a
-    ; start : 'a
-    ; finish : 'a
-    ; data_in : 'a [@bits num_bits]
-    ; data_in_valid : 'a
+    ; digit : 'a [@bits 4]
+    ; digit_valid : 'a
+    ; line_end : 'a
     }
-  [@@deriving hardcaml]
+  [@@deriving sexp_of, hardcaml]
 end
 
 module O = struct
   type 'a t =
-    { (* With_valid.t is an Interface type that contains a [valid] and a [value] field. *)
-      range : 'a With_valid.t [@bits num_bits]
+    { max_joltage : 'a [@bits 7]
+    ; total_joltage : 'a [@bits 32]
     }
-  [@@deriving hardcaml]
+  [@@deriving sexp_of, hardcaml]
 end
 
-module States = struct
-  type t =
-    | Idle
-    | Accepting_inputs
-    | Done
-  [@@deriving sexp_of, compare ~localize, enumerate]
-end
-
-let create scope ({ clock; clear; start; finish; data_in; data_in_valid } : _ I.t) : _ O.t
-  =
-  let spec = Reg_spec.create ~clock ~clear () in
-  let open Always in
-  let sm =
-    (* Note that the state machine defaults to initializing to the first state *)
-    State_machine.create (module States) spec
+let create (i : _ I.t) =
+  let open Signal in
+  let reg_spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+  
+  (* Track best 2-digit combo seen so far - try all pairs as we stream *)
+  let best_joltage = wire 7 in
+  
+  (* Keep a history buffer of digits seen - increased to 120 for long lines *)
+  let buffer_size = 120 in
+  let digit_buffer = List.init buffer_size ~f:(fun _ -> wire 4) in
+  let buffer_count = wire 8 in  (* 8 bits can hold up to 255 *)
+  
+  (* When valid digit comes in, check it against all previous digits *)
+  let pairs_to_check = 
+    List.mapi digit_buffer ~f:(fun idx prev_digit ->
+      let valid_idx = buffer_count >: (of_int ~width:8 idx) in
+      (* Form number with prev as tens, current as ones - ONLY THIS ORDER, NO REARRANGING *)
+      let pair = (mux prev_digit
+        (List.init 10 ~f:(fun i -> of_int ~width:7 (i * 10)) @ [of_int ~width:7 99]))
+        +: uresize i.digit 7
+      in
+      mux2 valid_idx pair (zero 7)
+    )
   in
-  (* let%hw[_var] is a shorthand that automatically applies a name to the signal, which
-     will show up in waveforms. The [_var] version is used when working with the Always
-     DSL. *)
-  let%hw_var min = Variable.reg spec ~width:num_bits in
-  let%hw_var max = Variable.reg spec ~width:num_bits in
-  (* We don't need to name the range here since it's immediately used in the module
-     output, which is automatically named when instantiating with [hierarchical] *)
-  let range = Variable.wire ~default:(zero num_bits) () in
-  let range_valid = Variable.wire ~default:gnd () in
-  compile
-    [ sm.switch
-        [ ( Idle
-          , [ when_
-                start
-                [ min <-- ones num_bits
-                ; max <-- zero num_bits
-                ; sm.set_next Accepting_inputs
-                ]
-            ] )
-        ; ( Accepting_inputs
-          , [ when_
-                data_in_valid
-                [ when_ (data_in <: min.value) [ min <-- data_in ]
-                ; when_ (data_in >: max.value) [ max <-- data_in ]
-                ]
-            ; when_ finish [ sm.set_next Done ]
-            ] )
-        ; ( Done
-          , [ range <-- max.value -: min.value
-            ; range_valid <-- vdd
-            ; when_ finish [ sm.set_next Accepting_inputs ]
-            ] )
-        ]
-    ];
-  (* [.value] is used to get the underlying Signal.t from a Variable.t in the Always DSL. *)
-  { range = { value = range.value; valid = range_valid.value } }
-;;
-
-(* The [hierarchical] wrapper is used to maintain module hierarchy in the generated
-   waveforms and (optionally) the generated RTL. *)
-let hierarchical scope =
-  let module Scoped = Hierarchy.In_scope (I) (O) in
-  Scoped.hierarchical ~scope ~name:"range_finder" create
-;;
+  
+  (* Find best among all pairs *)
+  let best_of_pairs = 
+    List.fold pairs_to_check ~init:(zero 7) ~f:(fun acc pair ->
+      mux2 (pair >: acc) pair acc
+    )
+  in
+  
+  (* Update best if we found something better *)
+  let new_best = 
+    mux2 i.digit_valid
+      (mux2 (best_of_pairs >: best_joltage) best_of_pairs best_joltage)
+      best_joltage
+  in
+  
+  let best_reg = reg reg_spec (mux2 i.line_end (zero 7) new_best) in
+  best_joltage <== best_reg;
+  
+  (* Shift buffer and add new digit *)
+  let new_buffer_count = 
+    mux2 i.line_end (zero 8)
+      (mux2 i.digit_valid
+         (mux2 (buffer_count ==: (of_int ~width:8 (buffer_size - 1))) 
+            buffer_count 
+            (buffer_count +: (of_int ~width:8 1)))
+         buffer_count)
+  in
+  let buffer_count_reg = reg reg_spec new_buffer_count in
+  buffer_count <== buffer_count_reg;
+  
+  List.iteri digit_buffer ~f:(fun idx buf ->
+    let new_val = 
+      if idx = 0 then
+        mux2 i.digit_valid i.digit buf
+      else
+        let prev_buf = List.nth_exn digit_buffer (idx - 1) in
+        mux2 i.digit_valid prev_buf buf
+    in
+    let buf_reg = reg reg_spec (mux2 i.line_end (zero 4) new_val) in
+    buf <== buf_reg
+  );
+  
+  (* Accumulate total *)
+  let total = wire 32 in
+  let new_total = mux2 i.line_end (total +: uresize best_joltage 32) total in
+  let total_reg = reg reg_spec new_total in
+  total <== total_reg;
+  
+  let max_out = reg reg_spec ~enable:i.line_end best_joltage in
+  
+  { O. max_joltage = max_out; total_joltage = total_reg }

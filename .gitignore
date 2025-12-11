@@ -1,5 +1,11 @@
-_build
-*.install
-*.merlin
-_opam
-
+_build/
+*.exe
+*.bc
+*.o
+*.cmi
+*.cmx
+*.cmo
+*.a
+*.so
+*.dylib
+.merlin

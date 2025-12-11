@@ -1,5 +1,6 @@
 (library
- (name hardcaml_demo_project)
+ (name advent_of_fpga_day3)
+ (public_name advent_of_fpga_day3)
  (libraries core hardcaml)
  (preprocess
   (pps ppx_hardcaml ppx_jane)))

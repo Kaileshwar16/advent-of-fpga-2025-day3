@@ -1,27 +1,23 @@
-(** An example design that takes a series of input values and calculates the range between
-    the largest and smallest one. *)
+open! Base
+open Hardcaml
 
-open! Core
-open! Hardcaml
-
-val num_bits : int
-
-(*_ The module interface exports the same I/O records. Note that the widths don't need to
-    be specified in the interface. *)
 module I : sig
   type 'a t =
     { clock : 'a
     ; clear : 'a
-    ; start : 'a
-    ; finish : 'a
-    ; data_in : 'a
-    ; data_in_valid : 'a
+    ; digit : 'a
+    ; digit_valid : 'a
+    ; line_end : 'a
     }
-  [@@deriving hardcaml]
+  [@@deriving sexp_of, hardcaml]
 end
 
 module O : sig
-  type 'a t = { range : 'a With_valid.t } [@@deriving hardcaml]
+  type 'a t =
+    { max_joltage : 'a
+    ; total_joltage : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
 end
 
-val hierarchical : Scope.t -> Signal.t I.t -> Signal.t O.t
+val create : Signal.t I.t -> Signal.t O.t

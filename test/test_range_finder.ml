@@ -1,123 +1,49 @@
-open! Core
-open! Hardcaml
-open! Hardcaml_waveterm
-open! Hardcaml_test_harness
-module Range_finder = Hardcaml_demo_project.Range_finder
-module Harness = Cyclesim_harness.Make (Range_finder.I) (Range_finder.O)
+open! Base
+open Hardcaml
+module Range_finder = Advent_of_fpga_day3.Range_finder
 
-let ( <--. ) = Bits.( <--. )
-let sample_input_values = [ 16; 67; 150; 4 ]
+let test_data = 
+  [ "987654321111111"
+  ; "811111111111119"
+  ; "234234234234278"
+  ; "818181911112111"
+  ]
 
-let simple_testbench (sim : Harness.Sim.t) =
+let char_to_digit c = Char.to_int c - Char.to_int '0'
+
+let%expect_test "battery_joltage" =
+  let module Sim = Cyclesim.With_interface (Range_finder.I) (Range_finder.O) in
+  let sim = Sim.create Range_finder.create in
+  
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
-  let cycle ?n () = Cyclesim.cycle ?n sim in
-  (* Helper function for inputting one value *)
-  let feed_input n =
-    inputs.data_in <--. n;
-    inputs.data_in_valid := Bits.vdd;
-    cycle ();
-    inputs.data_in_valid := Bits.gnd;
-    cycle ()
-  in
-  (* Reset the design *)
+  
   inputs.clear := Bits.vdd;
-  cycle ();
+  Cyclesim.cycle sim;
   inputs.clear := Bits.gnd;
-  cycle ();
-  (* Pulse the start signal *)
-  inputs.start := Bits.vdd;
-  cycle ();
-  inputs.start := Bits.gnd;
-  (* Input some data *)
-  List.iter sample_input_values ~f:(fun x -> feed_input x);
-  inputs.finish := Bits.vdd;
-  cycle ();
-  inputs.finish := Bits.gnd;
-  cycle ();
-  (* Wait for result to become valid *)
-  while not (Bits.to_bool !(outputs.range.valid)) do
-    cycle ()
-  done;
-  let range = Bits.to_unsigned_int !(outputs.range.value) in
-  print_s [%message "Result" (range : int)];
-  (* Show in the waveform that [valid] stays high. *)
-  cycle ~n:2 ()
-;;
+  
+  List.iter test_data ~f:(fun line ->
+    String.iter line ~f:(fun c ->
+      inputs.digit := Bits.of_int ~width:4 (char_to_digit c);
+      inputs.digit_valid := Bits.vdd;
+      Cyclesim.cycle sim;
+    );
+    
+    inputs.digit_valid := Bits.gnd;
+    inputs.line_end := Bits.vdd;
+    Cyclesim.cycle sim;
+    inputs.line_end := Bits.gnd;
+    
+    Stdio.printf "Line: %s -> Max: %d\n" line (Bits.to_int !(outputs.max_joltage));
+  );
+  
+  Cyclesim.cycle sim;
+  Stdio.printf "\nTotal output joltage: %d\n" (Bits.to_int !(outputs.total_joltage));
+  [%expect {|
+    Line: 987654321111111 -> Max: 98
+    Line: 811111111111119 -> Max: 98
+    Line: 234234234234278 -> Max: 87
+    Line: 818181911112111 -> Max: 98
 
-(* The [waves_config] argument to [Harness.run] determines where and how to save waveforms
-   for viewing later with a waveform viewer. The commented examples below show how to save
-   a waveterm file or a VCD file. *)
-let waves_config = Waves_config.no_waves
-
-(* let waves_config = *)
-(*   Waves_config.to_directory "/tmp/" *)
-(*   |> Waves_config.as_wavefile_format ~format:Hardcamlwaveform *)
-(* ;; *)
-
-(* let waves_config = *)
-(*   Waves_config.to_directory "/tmp/" *)
-(*   |> Waves_config.as_wavefile_format ~format:Vcd *)
-(* ;; *)
-
-let%expect_test "Simple test, optionally saving waveforms to disk" =
-  Harness.run_advanced ~waves_config ~create:Range_finder.hierarchical simple_testbench;
-  [%expect {| (Result (range 146)) |}]
-;;
-
-let%expect_test "Simple test with printing waveforms directly" =
-  (* For simple tests, we can print the waveforms directly in an expect-test (and use the
-     command [dune promote] to update it after the tests run). This is useful for quickly
-     visualizing or documenting a simple circuit, but limits the amount of data that can
-     be shown. *)
-  let display_rules =
-    [ Display_rule.port_name_matches
-        ~wave_format:(Bit_or Unsigned_int)
-        (Re.Glob.glob "range_finder*" |> Re.compile)
-    ]
-  in
-  Harness.run_advanced
-    ~create:Range_finder.hierarchical
-    ~trace:`All_named
-    ~print_waves_after_test:(fun waves ->
-      Waveform.print
-        ~display_rules
-          (* [display_rules] is optional, if not specified, it will print all named
-             signals in the design. *)
-        ~signals_width:30
-        ~display_width:92
-        ~wave_width:1
-        (* [wave_width] configures how many chars wide each clock cycle is *)
-        waves)
-    simple_testbench;
-  [%expect
-    {|
-    (Result (range 146))
-    ┌Signals─────────────────────┐┌Waves───────────────────────────────────────────────────────┐
-    │range_finder$i$clear        ││────┐                                                       │
-    │                            ││    └───────────────────────────────────────────────────────│
-    │range_finder$i$clock        ││┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ │
-    │                            ││  └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─│
-    │                            ││────────────┬───────┬───────┬───────┬───────────────────────│
-    │range_finder$i$data_in      ││ 0          │16     │67     │150    │4                      │
-    │                            ││────────────┴───────┴───────┴───────┴───────────────────────│
-    │range_finder$i$data_in_valid││            ┌───┐   ┌───┐   ┌───┐   ┌───┐                   │
-    │                            ││────────────┘   └───┘   └───┘   └───┘   └───────────────────│
-    │range_finder$i$finish       ││                                            ┌───┐           │
-    │                            ││────────────────────────────────────────────┘   └───────────│
-    │range_finder$i$start        ││        ┌───┐                                               │
-    │                            ││────────┘   └───────────────────────────────────────────────│
-    │                            ││────────────────┬───────┬───────┬───────────────────────────│
-    │range_finder$max            ││ 0              │16     │67     │150                        │
-    │                            ││────────────────┴───────┴───────┴───────────────────────────│
-    │                            ││────────────┬───┬───────────────────────┬───────────────────│
-    │range_finder$min            ││ 0          │65.│16                     │4                  │
-    │                            ││────────────┴───┴───────────────────────┴───────────────────│
-    │range_finder$o$range$valid  ││                                                ┌───────────│
-    │                            ││────────────────────────────────────────────────┘           │
-    │                            ││────────────────────────────────────────────────┬───────────│
-    │range_finder$o$range$value  ││ 0                                              │146        │
-    │                            ││────────────────────────────────────────────────┴───────────│
-    └────────────────────────────┘└────────────────────────────────────────────────────────────┘
+    Total output joltage: 381
     |}]
-;;
