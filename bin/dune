@@ -1,4 +1,4 @@
-(executable
- (name solve)
- (libraries base hardcaml advent_of_fpga_day3)
+(executables
+ (names solve solve_part2)
+ (libraries base hardcaml advent_of_fpga_day3 bignum)
  (preprocess (pps ppx_jane)))
