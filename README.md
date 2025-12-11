@@ -211,18 +211,6 @@ Software greedy algorithm chosen over hardware because:
 
 
 
-## Synthesis & Physical Implementation
-
-To generate Verilog RTL:
-```bash
-# Add a generator executable (future work)
-dune exec bin/generate.exe > battery_joltage.v
-```
-
-The design is suitable for:
-- **ASIC flows:** Open-source toolchains (OpenLane, TinyTapeout)
-- **FPGA flows:** Vivado, Quartus, or open-source (Yosys + nextpnr)
-
 ## Learning Resources
 
 - [Hardcaml Documentation](https://github.com/janestreet/hardcaml)
